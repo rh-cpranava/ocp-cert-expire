@@ -1,25 +1,30 @@
 #!/bin/bash
 
 ##
-## print-all-cert-expire-date.sh  - OpenShift script to print all TLS cert expire date
+## cert-expire.sh  - OpenShift script to print all TLS cert expire date
 ##
-## - Do not use `openssl x509 -in` command which can only handle first cert in a given input
 ##
 
-VERBOSE=false
-if [ "$1" == "-v" ]; then
-    VERBOSE=true
+duration=0
+re='^[0-9]+$'
+if [ $# -ne 0 ]; then
+   if [[ $1 =~ $re ]] ; then
+      duration=$(( 60*60*24*$1 ))
+   else
+      echo "Argument is not a number"
+      exit 1
+   fi
 fi
 
-function show_cert() {
-  if [ "$VERBOSE" == "true" ]; then
-    openssl crl2pkcs7 -nocrl -certfile /dev/stdin | openssl pkcs7 -print_certs -text | egrep -A9 ^Cert
-  else
-    openssl crl2pkcs7 -nocrl -certfile /dev/stdin | openssl pkcs7 -print_certs -text | grep Validity -A2
-  fi
-}
 
-## Process all kubeconfig files under /etc/origin/{master,node} directories
+function show_cert() {
+   if openssl x509 -checkend $duration -noout
+   then
+      echo "Certificate is valid"
+   else
+      echo "Certificate will expire"
+   fi
+}
 
 echo "------------------------- kubeconfig TLS certificate -------------------------"
 KUBECONFIG_FILES=~/.kube/config
@@ -31,16 +36,32 @@ done
 ## Process all service serving cert secrets
 
 echo "------------------------- all service serving cert secrets TLS certificate -------------------------"
-oc get secrets -A -o go-template='{{range .items}}{{if eq .type "kubernetes.io/tls"}}{{.metadata.namespace}}{{" "}}{{.metadata.name}}{{" "}}{{index .data "tls.crt"}}{{"\n"}}{{end}}{{end}}' | while read namespace name cert; do echo -en "$namespace\t$name\t"; echo $cert | base64 -d | show_cert; done 
+oc get secrets -A -o go-template='{{range .items}}{{if eq .type "kubernetes.io/tls"}}{{.metadata.namespace}}{{" "}}{{.metadata.name}}{{" "}}{{index .data "tls.crt"}}{{"\n"}}{{end}}{{end}}' | while read namespace name cert; do echo -en "$namespace\t$name\t"; echo $cert | base64 -d | show_cert; done
 
 
-## Process all cert files under /etc/origin/node directories --> Each node
+## Process all cert files under /etc/kubernetes directories --> Master node
 ### The following sections
-### Script execution machine require password-less SSH access to all nodes
+### Script execution requires sudo access to all nodes
 echo "------------------------- all nodes' kubelet TLS certificate -------------------------"
-for node in `oc get nodes |awk 'NR>1'|awk '{print $1}'`; do
-  for f in `oc debug node/$node -- chroot /host sh -c "find /etc/kubernetes/static-pod-resources -type f \( -name '*.crt' -o -name '*pem' \)"`; do
-    echo "$node - $f"
-    oc debug --preserve-pod=true node/$node -- chroot /host sh -c "cat $f" | show_cert
-  done
+for node in `oc get nodes |awk 'NR>1'|grep master | awk '{print $1}'`; do
+    oc debug node/$node -- sh -c 'tar --transform "s/.*\///g" -zcf /host/tmp/etcd.tar.gz $(ls -A /host/etc/kubernetes/static-pod-resources/etcd-*/secrets/*/*.crt)'
+    oc debug node/$node -- sh -c 'tar --transform "s/.*\///g" -zcf /host/tmp/kube.tar.gz $(ls -A /host/etc/kubernetes/static-pod-resources/kube-*/secrets/*/*.crt)'
+    oc debug node/$node -- sh -c 'cat /host/tmp/etcd.tar.gz' > $node-etcd.tar.gz
+    oc debug node/$node -- sh -c 'cat /host/tmp/kube.tar.gz' > $node-kube.tar.gz
+    mkdir $node-etcd
+    mkdir $node-kube
+    tar -C $node-etcd -xzf $node-etcd.tar.gz
+    tar -C $node-kube -xzf $node-kube.tar.gz
+    for cert in `ls $node-etcd`; do
+        echo $cert
+        cat $node-etcd/$cert | show_cert
+    done
+    for cert in `ls $node-kube`; do
+        echo $cert
+        cat $node-kube/$cert | show_cert
+    done
+    rm -rf $node-etcd
+    rm -rf $node-etcd.tar.gz
+    rm -rf $node-kube
+    rm -rf $node-kube.tar.gz
 done
