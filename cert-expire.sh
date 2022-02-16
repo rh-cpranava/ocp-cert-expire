@@ -44,10 +44,10 @@ oc get secrets -A -o go-template='{{range .items}}{{if eq .type "kubernetes.io/t
 ### Script execution requires sudo access to all nodes
 echo "------------------------- all nodes' kubelet TLS certificate -------------------------"
 for node in `oc get nodes |awk 'NR>1'|grep master | awk '{print $1}'`; do
-    oc debug node/$node -- sh -c 'tar --transform "s/.*\///g" -zcf /host/tmp/etcd.tar.gz $(ls -A /host/etc/kubernetes/static-pod-resources/etcd-*/secrets/*/*.crt)'
-    oc debug node/$node -- sh -c 'tar --transform "s/.*\///g" -zcf /host/tmp/kube.tar.gz $(ls -A /host/etc/kubernetes/static-pod-resources/kube-*/secrets/*/*.crt)'
-    oc debug node/$node -- sh -c 'cat /host/tmp/etcd.tar.gz' > $node-etcd.tar.gz
-    oc debug node/$node -- sh -c 'cat /host/tmp/kube.tar.gz' > $node-kube.tar.gz
+    oc debug -q node/$node -- sh -c 'tar --transform "s/.*\///g" -zcf /host/tmp/etcd.tar.gz $(ls -A /host/etc/kubernetes/static-pod-resources/etcd-*/secrets/*/*.crt)'
+    oc debug -q node/$node -- sh -c 'tar --transform "s/.*\///g" -zcf /host/tmp/kube.tar.gz $(ls -A /host/etc/kubernetes/static-pod-resources/kube-*/secrets/*/*.crt)'
+    oc debug -q node/$node -- sh -c 'cat /host/tmp/etcd.tar.gz' > $node-etcd.tar.gz
+    oc debug -q node/$node -- sh -c 'cat /host/tmp/kube.tar.gz' > $node-kube.tar.gz
     mkdir $node-etcd
     mkdir $node-kube
     tar -C $node-etcd -xzf $node-etcd.tar.gz
