@@ -18,9 +18,9 @@ fi
 
 
 function show_cert() {
-   if openssl x509 -checkend $duration -noout
+   if openssl x509 -checkend $duration -noout -enddate
    then
-      echo "Certificate is valid"
+      echo ""
    else
       echo "Certificate will expire"
    fi
