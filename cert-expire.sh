@@ -27,7 +27,11 @@ function show_cert() {
 }
 
 echo "------------------------- kubeconfig TLS certificate -------------------------"
-KUBECONFIG_FILES=~/.kube/config
+if [ -f "$KUBECONFIG" ]; then
+  KUBECONFIG_FILES=$KUBECONFIG
+else
+  KUBECONFIG_FILES=~/.kube/config
+fi
 for f in $KUBECONFIG_FILES; do
   echo "- $f"
   awk '/cert/ {print $2}' $f | base64 -d | show_cert
