@@ -4,7 +4,7 @@
 ## cert-expire.sh  - OpenShift script to print all TLS cert expire date
 ##
 ##
-
+RED='\033[0;31m'
 duration=0
 re='^[0-9]+$'
 if [ $# -ne 0 ]; then
@@ -22,7 +22,7 @@ function show_cert() {
    then
       echo ""
    else
-      echo "Certificate will expire"
+      echo "${RED}Certificate will expire${RED}"
    fi
 }
 
